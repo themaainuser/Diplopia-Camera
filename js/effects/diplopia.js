@@ -40,10 +40,16 @@ const FOLLOW_RATE = 10; // how quickly the shown separation follows its target, 
 const TREMOR = 0.0003;
 const BALANCE_WOBBLE = 0.05;
 const BLUR_LEAD = 0.7; // blur completes in this fraction of the onset, so softening precedes the split
+const REFOCUS_DURATION = 0.35;
+const BLINK_CLOSED_AT = 0.08;
+const BLINK_OPENS_AT = 0.14;
+const BLINK_OPEN_TIME = 0.16;
 const TAU = Math.PI * 2;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const smoothstep = (u) => u * u * (3 - 2 * u);
+// Passes 1 and comes back to it, so a value eased with it overshoots its target by about 10%.
+const easeOutBack = (u) => 1 + 2.70158 * (u - 1) ** 3 + 1.70158 * (u - 1) ** 2;
 const atRest = () => ({ separation: { x: 0, y: 0 }, blur: 0, balance: 0.5, blink: 0, relax: 0, phase: 'focused' });
 
 // `params` is kept by reference and read on every update, so sliders act live.
@@ -63,6 +69,8 @@ export function createDiplopia({ params, random = Math.random }) {
   let userOffset = 0;
   let shownX = 0;
   let shownY = 0;
+  let tRef = 0;
+  let from = null; // the state a refocus started from
   let state = atRest();
 
   function relaxed(dt) {
@@ -72,15 +80,23 @@ export function createDiplopia({ params, random = Math.random }) {
     noiseT += dt * params.driftSpeed;
 
     const base = params.restSeparation * (1 + params.driftAmount * noise(noiseT)) * relax;
+    // Keep the push inside the limits, so dragging back responds at once instead of unwinding first.
+    userOffset = clamp(userOffset, -base, MAX_SEPARATION - base);
     const free = base + userOffset;
     if (phase === 'relaxing' && tRelax >= params.onsetDuration) phase = 'drifting';
 
+    // Close images merge, and need a larger gap to come apart again than they needed to merge.
+    const threshold = params.fusionThreshold;
+    if (phase === 'drifting' && threshold > 0 && free < threshold) phase = 'fused';
+    else if (phase === 'fused' && (threshold === 0 || free > threshold * BREAKAWAY_RATIO)) phase = 'drifting';
+    const fused = phase === 'fused';
+
     const k = 1 - Math.exp(-dt * FOLLOW_RATE);
     const targetY = params.verticalMisalign * relax * (0.6 + 0.4 * noise(noiseT * 0.7 + 100));
-    shownX += (free - shownX) * k;
-    shownY += (targetY - shownY) * k;
+    shownX += ((fused ? 0 : free) - shownX) * k;
+    shownY += ((fused ? 0 : targetY) - shownY) * k;
 
-    const tremor = TREMOR * relax;
+    const tremor = fused ? 0 : TREMOR * relax;
     return {
       separation: {
         x: clamp(shownX + tremor * noise(noiseT * 9 + 300), 0, MAX_SEPARATION),
@@ -94,8 +110,33 @@ export function createDiplopia({ params, random = Math.random }) {
     };
   }
 
+  // A blink, with the eyes pulling back to a single image behind it.
+  function refocusing(dt) {
+    tRef += dt;
+    if (tRef >= REFOCUS_DURATION) {
+      phase = 'focused';
+      delay = drawDelay();
+      return atRest();
+    }
+    const u = tRef / REFOCUS_DURATION;
+    const left = 1 - easeOutBack(u);
+    const blink =
+      tRef < BLINK_CLOSED_AT ? tRef / BLINK_CLOSED_AT
+      : tRef < BLINK_OPENS_AT ? 1
+      : Math.max(0, 1 - (tRef - BLINK_OPENS_AT) / BLINK_OPEN_TIME);
+    return {
+      separation: { x: from.separation.x * left, y: from.separation.y * left },
+      blur: from.blur * (1 - u),
+      balance: params.dominance,
+      blink,
+      relax: from.relax * (1 - u),
+      phase,
+    };
+  }
+
   function update(dt) {
     dt = dt > 0 ? Math.min(dt, MAX_STEP) : 0;
+    if (phase === 'refocusing') return (state = refocusing(dt));
     if (phase === 'focused') {
       delay -= dt;
       if (delay > 0) return (state = atRest());
@@ -109,8 +150,17 @@ export function createDiplopia({ params, random = Math.random }) {
     return (state = relaxed(dt));
   }
 
-  function push() {}
-  function refocus() {}
+  function push(delta) {
+    if (phase === 'focused' || phase === 'refocusing' || !Number.isFinite(delta)) return;
+    userOffset += delta;
+  }
+
+  function refocus() {
+    if (phase === 'focused' || phase === 'refocusing') return;
+    from = state;
+    phase = 'refocusing';
+    tRef = 0;
+  }
 
   return {
     update,
