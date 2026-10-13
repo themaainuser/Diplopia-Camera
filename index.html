@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>Diplopia Camera</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="stage">
+    <canvas id="view" aria-label="Live view. Drag sideways to move the two images, tap to refocus."></canvas>
+  </main>
+
+  <div id="bar" role="toolbar" aria-label="Camera controls">
+    <div class="segmented" role="group" aria-label="Mode">
+      <button id="mode-whole" type="button" aria-pressed="true" aria-label="Whole-frame mode">
+        <span class="long">Whole-frame</span><span class="short">Whole</span>
+      </button>
+      <button id="mode-depth" type="button" aria-pressed="false" aria-label="Depth-aware mode">
+        <span class="long">Depth-aware</span><span class="short">Depth</span>
+      </button>
+    </div>
+
+    <button id="photo" type="button" aria-label="Take photo"></button>
+
+    <div class="record-wrap">
+      <button id="record" type="button" aria-pressed="false" aria-label="Record video"><span class="dot"></span></button>
+      <span id="record-time" hidden>0:00</span>
+    </div>
+
+    <button id="camera-switch" class="icon" type="button" aria-label="Switch camera" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><path d="M9.5 13.5a2.5 2.5 0 0 1 4.6-1.4M14.5 13.5a2.5 2.5 0 0 1-4.6 1.4"/><path d="M14.2 10.6v1.6h-1.6M9.8 16.4v-1.6h1.6"/></svg>
+    </button>
+
+    <button id="settings-toggle" class="icon" type="button" aria-expanded="false" aria-controls="panel" aria-label="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+    </button>
+  </div>
+
+  <aside id="panel" aria-label="Settings" hidden>
+    <p id="status" role="status"></p>
+    <div id="sliders"></div>
+    <button id="reset" type="button">Reset to defaults</button>
+  </aside>
+
+  <div id="message" role="alertdialog" aria-labelledby="message-title" aria-describedby="message-detail" hidden>
+    <div class="card">
+      <h1 id="message-title"></h1>
+      <p id="message-detail"></p>
+      <button id="message-action" type="button"></button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
