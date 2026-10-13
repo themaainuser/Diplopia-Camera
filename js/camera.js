@@ -108,7 +108,7 @@ export function createTestPattern(width = 1280, height = 720) {
   return canvas;
 }
 
-async function openCamera(facing) {
+async function openCamera(facing, onEnded) {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw Object.assign(new Error('The camera API is not available.'), { name: 'SecurityError' });
   }
@@ -135,7 +135,10 @@ async function openCamera(facing) {
     throw err;
   }
 
-  const reported = stream.getVideoTracks()[0]?.getSettings?.().facingMode;
+  const track = stream.getVideoTracks()[0];
+  // Fires when the camera goes away by itself (unplugged, permission withdrawn), not when we stop it.
+  track?.addEventListener?.('ended', () => onEnded?.());
+  const reported = track?.getSettings?.().facingMode;
   return {
     element: video,
     kind: 'camera',
@@ -159,12 +162,12 @@ function openImage(path) {
   });
 }
 
-export async function openSource(desc, { facing = 'environment' } = {}) {
+export async function openSource(desc, { facing = 'environment', onEnded } = {}) {
   if (desc.kind === 'test') {
     return { element: createTestPattern(), kind: 'test', mirrored: false, facing: null, stop() {} };
   }
   if (desc.kind === 'image') return openImage(desc.path);
-  return openCamera(facing);
+  return openCamera(facing, onEnded);
 }
 
 export async function countCameras() {

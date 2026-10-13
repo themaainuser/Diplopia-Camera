@@ -71,6 +71,20 @@ export function createGestures(el, { onTap, onDrag, threshold = 8 }) {
   });
 }
 
+// Space blinks, unless it belongs to the focused control: a button it would press or a field it would
+// type into. A slider does nothing with Space, so it does not count.
+export function spaceRefocuses(target) {
+  const control = target?.closest?.('button, select, textarea, input');
+  if (!control) return true;
+  return control.tagName === 'INPUT' && control.type === 'range';
+}
+
+// A mouse or touch click leaves focus on the button, which would then swallow the next Space.
+// Give the focus back. A button reached with the keyboard keeps it.
+export function releasePointerFocus(event) {
+  if (event.detail > 0) event.target?.closest?.('button')?.blur();
+}
+
 export function formatValue(def, value) {
   switch (def.format) {
     case 'seconds':

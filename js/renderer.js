@@ -11,11 +11,22 @@ const ZOOM_EASE = 0.15; // share of the remaining zoom change applied per frame
 const SIGMA_PER_RADIUS = 0.6; // Gaussian sigma that reads like a blur disc of a given radius
 const TAPS_PER_SIDE = 12; // must match the loop bounds in BLUR_FRAGMENT
 
-// How far to zoom in so that the largest expected shift never samples past the edge of the frame.
-export function zoomFor(params, mode) {
-  let half = 0.5 * params.restSeparation * (1 + params.driftAmount) + params.blur;
+// How far to zoom in so that the largest shift never samples past the edge of the frame.
+// That shift is the full range of the drift, or the current separation when a drag has pushed it further.
+export function zoomFor(params, mode, separation = 0) {
+  const spread = Math.max(params.restSeparation * (1 + params.driftAmount), Math.abs(separation));
+  let half = 0.5 * spread + params.blur;
   if (mode === 'depth') half += 0.5 * params.depthStrength + params.depthBlur;
   return Math.min(MAX_ZOOM, 1 / Math.max(1e-3, 1 - 2 * half));
+}
+
+// How much smaller than the frame the blur buffers are. Sigma is the largest blur in frame pixels.
+// Keeping sigma within four buffer pixels keeps neighbouring blur taps within one, so edges stay smooth.
+export function blurScale(sigma) {
+  if (sigma <= 8) return 2;
+  if (sigma <= 16) return 4;
+  if (sigma <= 32) return 8;
+  return 16;
 }
 
 // Maps a point on the displayed picture (0..1, v = 0 at the top) back to the source frame.
@@ -283,8 +294,7 @@ export function createRenderer(canvas) {
 
     // The blur buffers shrink further when the settings allow a large blur, so the taps stay close together.
     // This follows the sliders, not the moment-to-moment blur, so it never changes mid-effect.
-    const largestSigma = SIGMA_PER_RADIUS * (params.blur + (useDepth ? params.depthBlur : 0)) * width;
-    const scale = largestSigma <= 16 ? 2 : largestSigma <= 32 ? 4 : 8;
+    const scale = blurScale(SIGMA_PER_RADIUS * (params.blur + (useDepth ? params.depthBlur : 0)) * width);
     ensureTargets(Math.max(1, Math.round(width / scale)), Math.max(1, Math.round(height / scale)));
 
     gl.activeTexture(gl.TEXTURE0 + UNIT.video);
@@ -308,7 +318,7 @@ export function createRenderer(canvas) {
     const softerMix = hasSofter ? blurInto(targets.softer, softerRadius, scale, width) : softMix;
 
     // Ease the zoom, so a mode switch or a slider change does not make the picture jump in size.
-    const targetZoom = zoomFor(params, useDepth ? 'depth' : 'whole');
+    const targetZoom = zoomFor(params, useDepth ? 'depth' : 'whole', frame.separation.x);
     zoom = zoom === null ? targetZoom : zoom + (targetZoom - zoom) * ZOOM_EASE;
 
     const u = composite.uniforms;
@@ -335,5 +345,12 @@ export function createRenderer(canvas) {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
-  return { resize, render };
+  return {
+    resize,
+    render,
+    // The zoom the last frame was drawn with, for mapping taps back to the source. Null before the first frame.
+    get zoom() {
+      return zoom;
+    },
+  };
 }

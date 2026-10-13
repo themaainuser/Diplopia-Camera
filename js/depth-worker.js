@@ -33,7 +33,10 @@ async function load() {
   let lastError = null;
   for (const { device, dtype } of attempts) {
     try {
-      estimator = await library.pipeline('depth-estimation', MODEL, { device, dtype, progress_callback: reportProgress });
+      const candidate = await library.pipeline('depth-estimation', MODEL, { device, dtype, progress_callback: reportProgress });
+      // A first run here, so a device that loads the model but cannot run it falls through to the next one.
+      await candidate(warmUpImage());
+      estimator = candidate;
       self.postMessage({ type: 'ready', device });
       return;
     } catch (err) {
@@ -42,6 +45,13 @@ async function load() {
   }
   console.warn('Depth model failed to start:', lastError);
   throw new Error('the depth model could not be downloaded or started on this device.');
+}
+
+function warmUpImage() {
+  const size = 64;
+  const pixels = new Uint8ClampedArray(size * size * 4);
+  for (let i = 0; i < size * size; i++) pixels.set([(i % size) * 4, Math.floor(i / size) * 4, 128, 255], i * 4);
+  return new RawImage(pixels, size, size, 4);
 }
 
 async function estimate({ pixels, width, height }) {
@@ -57,8 +67,12 @@ self.onmessage = async ({ data: msg }) => {
     if (msg.type === 'load') await load();
     else if (msg.type === 'frame') await estimate(msg);
   } catch (err) {
-    if (msg.type === 'frame') console.warn('Depth estimation failed:', err);
-    const message = msg.type === 'frame' ? 'depth estimation stopped working.' : err.message;
-    self.postMessage({ type: 'error', message });
+    if (msg.type === 'frame') {
+      // The page skips a failed frame and only gives up after several in a row.
+      console.warn('Depth estimation failed:', err);
+      self.postMessage({ type: 'frame-error' });
+    } else {
+      self.postMessage({ type: 'error', message: err.message });
+    }
   }
 };

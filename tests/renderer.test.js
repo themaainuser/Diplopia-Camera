@@ -18,3 +18,16 @@ test('displayToSource undoes zoom and mirror', () => {
   assert.deepEqual(p(1, 0, { zoom: 1.25, mirror: false }), [0.9, 0.1]);
   assert.deepEqual(p(1, 0, { zoom: 1.25, mirror: true }), [0.1, 0.1]);
 });
+
+import { blurScale } from '../js/renderer.js';
+
+test('zoomFor grows to hide a separation pushed past the resting range', () => {
+  assert.ok(near(zoomFor(P, 'whole', 0.01), zoomFor(P, 'whole')));
+  assert.ok(near(zoomFor(P, 'whole', 0.12), 1 / (1 - 2 * (0.06 + 0.006))));
+  assert.ok(near(zoomFor(P, 'whole', -0.12), zoomFor(P, 'whole', 0.12)));
+});
+
+test('blurScale keeps the blur taps no more than a texel apart', () => {
+  assert.deepEqual([4, 8, 8.1, 16, 16.1, 32, 40].map(blurScale), [2, 2, 4, 4, 8, 8, 16]);
+  for (let sigma = 0.5; sigma <= 64; sigma += 0.5) assert.ok(sigma / blurScale(sigma) <= 4, `sigma ${sigma}`);
+});

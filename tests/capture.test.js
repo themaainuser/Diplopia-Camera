@@ -47,3 +47,58 @@ test('a share that fails for another reason falls back to download', async () =>
   assert.equal(await deliver(blob, 'a.jpg', e), 'downloaded');
   assert.deepEqual(e.calls, ['download']);
 });
+
+import { createOutbox, createRecorder } from '../js/capture.js';
+
+test('a file whose share sheet was dismissed can still be saved to the device', async () => {
+  const e = env({ share: async () => { throw abort; } });
+  const outbox = createOutbox(e);
+  assert.equal(await outbox.send(blob, 'clip.mp4'), 'cancelled');
+  assert.equal(outbox.pending, true);
+  assert.deepEqual(e.calls, []);
+  assert.equal(outbox.saveToDevice(), true);
+  assert.deepEqual(e.calls, ['download']);
+  assert.equal(outbox.pending, false);
+  assert.equal(outbox.saveToDevice(), false);
+  assert.deepEqual(e.calls, ['download']);
+});
+
+test('a delivered file is not kept, and a kept one can be discarded', async () => {
+  const outbox = createOutbox(env());
+  assert.equal(await outbox.send(blob, 'a.jpg'), 'shared');
+  assert.equal(outbox.pending, false);
+  const dismissed = createOutbox(env({ share: async () => { throw abort; } }));
+  await dismissed.send(blob, 'a.jpg');
+  dismissed.discard();
+  assert.equal(dismissed.pending, false);
+});
+
+test('the recorder hands over one clip and stops its stream, by request or at the time limit', async () => {
+  const previous = globalThis.MediaRecorder;
+  let stoppedTracks = 0;
+  globalThis.MediaRecorder = class {
+    static isTypeSupported = (type) => type === 'video/webm';
+    constructor() { this.state = 'inactive'; }
+    start() { this.state = 'recording'; }
+    stop() { this.state = 'inactive'; this.ondataavailable({ data: new Blob(['abc']) }); this.onstop(); }
+  };
+  const canvas = { captureStream: () => ({ getTracks: () => [{ stop() { stoppedTracks++; } }] }) };
+  try {
+    const clips = [];
+    const recorder = createRecorder(canvas, { onTick() {}, onStop: (clip, ext) => clips.push([clip.type, clip.size, ext]) });
+    recorder.start();
+    assert.equal(recorder.recording, true);
+    recorder.stop();
+    assert.deepEqual(clips, [['video/webm', 3, 'webm']]);
+    assert.deepEqual([recorder.recording, stoppedTracks], [false, 1]);
+
+    const ticks = [];
+    await new Promise((resolve) => {
+      createRecorder(canvas, { maxSeconds: 0, onTick: (s) => ticks.push(s), onStop: resolve }).start();
+    });
+    assert.equal(ticks[0], 0);
+    assert.equal(stoppedTracks, 2);
+  } finally {
+    globalThis.MediaRecorder = previous;
+  }
+});

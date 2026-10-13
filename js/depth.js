@@ -7,6 +7,8 @@ const INPUT_WIDTH = 256; // frames are shrunk to this width before inference
 const BLEND = 0.5; // share of each new map mixed into the shown one, to calm flicker
 const FIXATION_FOLLOW = 0.3; // how far the fixation depth moves toward its new value per map
 const RATE_SMOOTHING = 0.2;
+const MAX_FRAME_ERRORS = 3; // failed frames in a row before the mode is given up on
+const FRAMES_FAILING = 'depth estimation stopped working.';
 const LOAD_FAILED = 'the depth model could not be loaded. Check your connection.';
 
 // Mixes a new depth map into the previous one. Maps of different sizes are not mixed.
@@ -66,6 +68,7 @@ export function createDepth({ onStatus = () => {}, createWorker = defaultWorker,
   let fixU = 0.5;
   let fixV = 0.5;
   let lastMapTime = 0;
+  let frameErrors = 0;
 
   function setStatus(patch) {
     status = { ...status, ...patch };
@@ -75,11 +78,21 @@ export function createDepth({ onStatus = () => {}, createWorker = defaultWorker,
   function fail(message) {
     waiting = false;
     map = null;
+    worker?.terminate?.();
+    worker = null;
     setStatus({ state: 'error', message });
+  }
+
+  // One bad frame is skipped. A run of them means the model can no longer run on this device.
+  function onFrameError() {
+    waiting = false;
+    frameErrors += 1;
+    if (frameErrors >= MAX_FRAME_ERRORS) fail(FRAMES_FAILING);
   }
 
   function onDepth({ data, width, height }) {
     waiting = false;
+    frameErrors = 0;
     if (!active) return; // the mode was left while this frame was being worked on
 
     const sameSize = map && map.width === width && map.height === height;
@@ -101,6 +114,7 @@ export function createDepth({ onStatus = () => {}, createWorker = defaultWorker,
     if (msg.type === 'progress') setStatus({ percent: msg.percent });
     else if (msg.type === 'ready') setStatus({ state: 'ready', device: msg.device, percent: 100 });
     else if (msg.type === 'error') fail(msg.message);
+    else if (msg.type === 'frame-error') onFrameError();
     else if (msg.type === 'depth') onDepth(msg);
   }
 

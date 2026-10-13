@@ -39,6 +39,32 @@ export async function deliver(blob, name, env) {
   return 'downloaded';
 }
 
+// Delivers files and keeps the last one whose share sheet was dismissed, so a slip of the finger
+// does not lose a recording: it can still be saved to the device.
+export function createOutbox(env) {
+  let kept = null;
+  return {
+    async send(blob, name) {
+      kept = { blob, name };
+      const result = await deliver(blob, name, env);
+      if (result !== 'cancelled') kept = null;
+      return result;
+    },
+    get pending() {
+      return kept !== null;
+    },
+    saveToDevice() {
+      if (!kept) return false;
+      env.download(kept.blob, kept.name);
+      kept = null;
+      return true;
+    },
+    discard() {
+      kept = null;
+    },
+  };
+}
+
 export function browserEnv() {
   return {
     coarse: window.matchMedia('(pointer: coarse)').matches,

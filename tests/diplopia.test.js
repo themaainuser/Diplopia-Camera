@@ -60,3 +60,11 @@ test('a huge or invalid time step is clamped (tab was hidden)', () => {
     assert.equal(s.separation.x, 0);
   }
 });
+
+test('a huge time step while drifting does not make the picture jump', () => {
+  const m = make(); const before = toDrifting(m);
+  const after = m.update(86400);
+  assert.equal(after.phase, 'drifting');
+  assert.ok(Math.abs(after.separation.x - before.separation.x) < 0.002);
+  for (const v of [after.separation.x, after.separation.y, after.blur, after.balance]) assert.ok(Number.isFinite(v));
+});

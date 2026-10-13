@@ -65,3 +65,24 @@ test('a worker failure becomes an error status', () => {
   depth.offer({});
   assert.equal(depth.map, null);
 });
+
+test('isolated frame errors are skipped; three in a row fail the mode and stop the worker', () => {
+  const sent = [];
+  const worker = { terminated: 0, postMessage: (m) => sent.push(m), terminate() { this.terminated++; } };
+  const depth = createDepth({ onStatus() {}, createWorker: () => worker, grab: () => ({ pixels: new Uint8ClampedArray(16), width: 2, height: 2 }) });
+  const emit = (data) => worker.onmessage({ data });
+  const frames = () => sent.filter((m) => m.type === 'frame').length;
+  const failFrame = () => { depth.offer({}); emit({ type: 'frame-error' }); };
+
+  depth.start(); emit({ type: 'ready', device: 'webgpu' });
+  failFrame();
+  assert.equal(depth.status.state, 'ready');
+  depth.offer({}); assert.equal(frames(), 2);                       // not stuck waiting for the failed frame
+  emit({ type: 'depth', data: new Uint8Array(4).fill(255), width: 2, height: 2 });
+  failFrame(); failFrame();
+  assert.equal(depth.status.state, 'ready');                        // the success in between reset the count
+  failFrame();
+  assert.equal(depth.status.state, 'error');
+  assert.equal(worker.terminated, 1);
+  assert.equal(depth.map, null);
+});

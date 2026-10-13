@@ -72,3 +72,28 @@ test('a pointer that cannot be captured still gives a tap', () => {
   el.fire('pointerup', 500, 275);
   assert.equal(taps.length, 1);
 });
+
+import { spaceRefocuses, releasePointerFocus } from '../js/ui.js';
+
+const control = (tagName, type) => ({
+  tagName, type, blurred: 0,
+  blur() { this.blurred++; },
+  closest(selector) { return selector.split(',').some((s) => s.trim() === tagName.toLowerCase()) ? this : null; },
+});
+
+test('Space blinks unless the focused control needs it', () => {
+  assert.equal(spaceRefocuses(null), true);
+  assert.equal(spaceRefocuses(control('CANVAS')), true);
+  assert.equal(spaceRefocuses(control('INPUT', 'range')), true);   // Space does nothing on a slider
+  assert.equal(spaceRefocuses(control('BUTTON')), false);
+  assert.equal(spaceRefocuses(control('INPUT', 'text')), false);
+  assert.equal(spaceRefocuses(control('SELECT')), false);
+});
+
+test('a pointer click gives focus back, a keyboard press keeps it', () => {
+  const byMouse = control('BUTTON'), byKeyboard = control('BUTTON');
+  releasePointerFocus({ detail: 1, target: byMouse });
+  releasePointerFocus({ detail: 0, target: byKeyboard });
+  assert.deepEqual([byMouse.blurred, byKeyboard.blurred], [1, 0]);
+  assert.doesNotThrow(() => releasePointerFocus({ detail: 1, target: control('CANVAS') }));
+});

@@ -33,7 +33,7 @@ npm test
 | Camera button | Switches between front and rear cameras, when there are two |
 | Sliders button | Opens the settings |
 
-Photos and clips open the share sheet on a phone and download on a computer. Files are named `diplopia-<date>-<time>`.
+Photos and clips open the share sheet on a phone and download on a computer. If you close the share sheet without sharing, a "Save to device" button stays up for a few seconds. Files are named `diplopia-<date>-<time>`.
 
 ### Settings
 
@@ -73,7 +73,7 @@ Browsers only allow the camera on `localhost` or over HTTPS, so opening your com
 1. Upload this folder to any static host that serves HTTPS, for example GitHub Pages.
 2. Run `npm start` and expose port 8080 through an HTTPS tunnel, for example `cloudflared tunnel --url http://localhost:8080`, then open the tunnel's address on the phone.
 
-The local server never serves dot-folders such as `.git`.
+The local server only serves the app's own files (HTML, CSS, JavaScript and images) and never anything inside dot-folders such as `.git`, so tunnelling it does not expose the rest of the folder.
 
 ## Privacy
 

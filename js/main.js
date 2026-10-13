@@ -2,13 +2,15 @@ import { createDiplopia, defaultParams, PARAM_DEFS } from './effects/diplopia.js
 import { parseSource, openSource, sourceSize, describeCameraError, countCameras } from './camera.js';
 import { createRenderer, zoomFor, displayToSource } from './renderer.js';
 import { createDepth } from './depth.js';
-import { capturePhoto, canRecord, createRecorder, deliver, browserEnv, fileName } from './capture.js';
+import { capturePhoto, canRecord, createRecorder, createOutbox, browserEnv, fileName } from './capture.js';
 import {
   showMessage, hideMessage, containFit, createGestures, createPanel, loadSettings, saveSettings, formatStatus,
+  spaceRefocuses, releasePointerFocus,
 } from './ui.js';
 
 const STATUS_INTERVAL = 250; // milliseconds between status line updates
 const NOTICE_TIME = 8000; // milliseconds a one-off notice stays up
+const OFFER_TIME = 20000; // milliseconds a notice with a button stays up
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view');
@@ -17,6 +19,8 @@ const message = $('message');
 const panelEl = $('panel');
 const statusEl = $('status');
 const noticeEl = $('notice');
+const noticeText = $('notice-text');
+const noticeAction = $('notice-action');
 const cameraSwitch = $('camera-switch');
 const recordButton = $('record');
 const recordTime = $('record-time');
@@ -37,6 +41,7 @@ const params = loadSettings(storage);
 const model = createDiplopia({ params });
 const state = { mode: 'whole', source: null, facing: 'environment', depthOverride: null, pendingPhoto: false };
 let recorder = null;
+let outbox = null;
 let switchingCamera = false;
 const depth = createDepth({ onStatus: onDepthStatus });
 let depthError = null; // why depth-aware mode is unavailable, once it has failed
@@ -78,10 +83,29 @@ async function refreshCameraSwitch() {
   cameraSwitch.hidden = !(state.source?.kind === 'camera' && (await countCameras()) >= 2);
 }
 
+// Opens the source for the current facing. `onEnded` only matters for a camera.
+async function openFacing(facing) {
+  const opened = await openSource(sourceDesc, { facing, onEnded: () => onSourceEnded(opened) });
+  return opened;
+}
+
+// The camera went away by itself: unplugged, taken by another app, or permission withdrawn.
+function onSourceEnded(ended) {
+  if (state.source !== ended) return;
+  recorder?.stop();
+  ended.stop();
+  state.source = null;
+  showMessage(
+    message,
+    { title: 'The camera stopped', detail: 'It may have been unplugged or taken by another app.', action: 'retry' },
+    openCurrentSource,
+  );
+}
+
 async function openCurrentSource() {
   hideMessage(message);
   try {
-    state.source = await openSource(sourceDesc, { facing: state.facing });
+    state.source = await openFacing(state.facing);
   } catch (err) {
     showSourceError(err);
   }
@@ -101,11 +125,11 @@ async function switchCamera() {
   state.source = null;
   try {
     state.facing = previous === 'environment' ? 'user' : 'environment';
-    state.source = await openSource(sourceDesc, { facing: state.facing });
+    state.source = await openFacing(state.facing);
   } catch (err) {
     // Go back to the camera that was working, then say what went wrong.
     state.facing = previous;
-    state.source = await openSource(sourceDesc, { facing: previous }).catch(() => null);
+    state.source = await openFacing(previous).catch(() => null);
     showSourceError(err);
   } finally {
     switchingCamera = false;
@@ -115,9 +139,23 @@ async function switchCamera() {
 
 async function save(blob, ext) {
   const name = fileName(new Date(), ext);
-  const result = await deliver(blob, name, browserEnv());
+  outbox ??= createOutbox(browserEnv());
+  const result = await outbox.send(blob, name);
   window.__app.lastSaved = { name, type: blob.type, size: blob.size, result };
-  if (result === 'downloaded') showNotice(`Saved ${name}`);
+  if (result === 'downloaded') {
+    showNotice(`Saved ${name}`);
+  } else if (result === 'cancelled') {
+    // The share sheet was closed. The file is kept for a while in case that was a slip.
+    showNotice('Not shared.', {
+      action: {
+        label: 'Save to device',
+        run: () => {
+          if (outbox.saveToDevice()) showNotice(`Saved ${name}`);
+        },
+      },
+      onExpire: () => outbox.discard(),
+    });
+  }
 }
 
 function savePhoto() {
@@ -162,12 +200,20 @@ function setUpRecording() {
 }
 
 // A short line above the bar. With `lasting` it stays until replaced; otherwise it clears itself.
+// It can carry one button (`action`), and then stays longer.
 let noticeTimer = 0;
-function showNotice(text, { lasting = false } = {}) {
+function showNotice(text, { lasting = false, action = null, onExpire = null } = {}) {
   clearTimeout(noticeTimer);
-  noticeEl.textContent = text;
+  noticeText.textContent = text;
+  noticeAction.hidden = !action;
+  noticeAction.textContent = action?.label ?? '';
+  noticeAction.onclick = action ? action.run : null;
   noticeEl.hidden = !text;
-  if (text && !lasting) noticeTimer = setTimeout(() => showNotice(''), NOTICE_TIME);
+  if (!text || lasting) return;
+  noticeTimer = setTimeout(() => {
+    onExpire?.();
+    showNotice('');
+  }, action ? OFFER_TIME : NOTICE_TIME);
 }
 
 function setMode(mode) {
@@ -223,17 +269,19 @@ function setUpControls() {
     onTap: (u, v) => {
       model.refocus();
       if (state.mode !== 'depth' || !state.source) return;
-      const point = displayToSource(u, v, { zoom: zoomFor(params, 'depth'), mirror: state.source.mirrored });
+      const zoom = renderer.zoom ?? zoomFor(params, 'depth');
+      const point = displayToSource(u, v, { zoom, mirror: state.source.mirrored });
       depth.setFixationPoint(point.u, point.v);
     },
   });
 
   window.addEventListener('keydown', (event) => {
-    if (event.code !== 'Space' || event.repeat) return;
-    if (event.target instanceof Element && event.target.closest('button, input, select, textarea')) return;
+    if (event.code !== 'Space' || event.repeat || !spaceRefocuses(event.target)) return;
     event.preventDefault();
     model.refocus();
   });
+  // Without this, the button last clicked would take the next Space instead of the blink.
+  document.addEventListener('click', releasePointerFocus);
 
   const settingsToggle = $('settings-toggle');
   settingsToggle.addEventListener('click', () => {
