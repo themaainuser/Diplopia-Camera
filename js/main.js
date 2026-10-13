@@ -2,6 +2,7 @@ import { createDiplopia, defaultParams, PARAM_DEFS } from './effects/diplopia.js
 import { parseSource, openSource, sourceSize, describeCameraError, countCameras } from './camera.js';
 import { createRenderer, zoomFor, displayToSource } from './renderer.js';
 import { createDepth } from './depth.js';
+import { capturePhoto, canRecord, createRecorder, deliver, browserEnv, fileName } from './capture.js';
 import {
   showMessage, hideMessage, containFit, createGestures, createPanel, loadSettings, saveSettings, formatStatus,
 } from './ui.js';
@@ -17,6 +18,8 @@ const panelEl = $('panel');
 const statusEl = $('status');
 const noticeEl = $('notice');
 const cameraSwitch = $('camera-switch');
+const recordButton = $('record');
+const recordTime = $('record-time');
 const modeButtons = { whole: $('mode-whole'), depth: $('mode-depth') };
 
 const sourceDesc = parseSource(location.search);
@@ -32,7 +35,9 @@ try {
 
 const params = loadSettings(storage);
 const model = createDiplopia({ params });
-const state = { mode: 'whole', source: null, facing: 'environment', depthOverride: null };
+const state = { mode: 'whole', source: null, facing: 'environment', depthOverride: null, pendingPhoto: false };
+let recorder = null;
+let switchingCamera = false;
 const depth = createDepth({ onStatus: onDepthStatus });
 let depthError = null; // why depth-aware mode is unavailable, once it has failed
 
@@ -83,9 +88,15 @@ async function openCurrentSource() {
   refreshCameraSwitch();
 }
 
+// Switching cameras can change the picture size, which would break a recording in progress.
+function updateCameraSwitch() {
+  cameraSwitch.disabled = switchingCamera || Boolean(recorder?.recording);
+}
+
 async function switchCamera() {
   const previous = state.facing;
-  cameraSwitch.disabled = true;
+  switchingCamera = true;
+  updateCameraSwitch();
   state.source?.stop();
   state.source = null;
   try {
@@ -97,8 +108,57 @@ async function switchCamera() {
     state.source = await openSource(sourceDesc, { facing: previous }).catch(() => null);
     showSourceError(err);
   } finally {
-    cameraSwitch.disabled = false;
+    switchingCamera = false;
+    updateCameraSwitch();
   }
+}
+
+async function save(blob, ext) {
+  const name = fileName(new Date(), ext);
+  const result = await deliver(blob, name, browserEnv());
+  window.__app.lastSaved = { name, type: blob.type, size: blob.size, result };
+  if (result === 'downloaded') showNotice(`Saved ${name}`);
+}
+
+function savePhoto() {
+  capturePhoto(canvas)
+    .then((blob) => save(blob, 'jpg'))
+    .catch(() => showNotice('The photo could not be saved.'));
+}
+
+function showRecording(on) {
+  recordButton.setAttribute('aria-pressed', String(on));
+  recordButton.setAttribute('aria-label', on ? 'Stop recording' : 'Record video');
+  recordTime.hidden = !on;
+  updateCameraSwitch();
+}
+
+function setUpRecording() {
+  if (!canRecord()) {
+    recordButton.parentElement.hidden = true;
+    return;
+  }
+  recorder = createRecorder(canvas, {
+    onTick: (seconds) => {
+      recordTime.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    },
+    onStop: (blob, ext) => {
+      showRecording(false);
+      save(blob, ext).catch(() => showNotice('The clip could not be saved.'));
+    },
+  });
+  recordButton.addEventListener('click', () => {
+    if (recorder.recording) {
+      recorder.stop();
+      return;
+    }
+    try {
+      recorder.start();
+      showRecording(true);
+    } catch {
+      showNotice('Recording could not start.');
+    }
+  });
 }
 
 // A short line above the bar. With `lasting` it stays until replaced; otherwise it clears itself.
@@ -184,6 +244,10 @@ function setUpControls() {
   modeButtons.whole.addEventListener('click', () => setMode('whole'));
   modeButtons.depth.addEventListener('click', () => setMode('depth'));
   cameraSwitch.addEventListener('click', switchCamera);
+  $('photo').addEventListener('click', () => {
+    state.pendingPhoto = true;
+  });
+  setUpRecording();
 }
 
 let lastTime = 0;
@@ -212,6 +276,12 @@ function frame(now) {
     depth: depthMap,
     showDepth,
   });
+
+  // The photo is taken here, straight after drawing, while the canvas still holds this frame.
+  if (state.pendingPhoto) {
+    state.pendingPhoto = false;
+    savePhoto();
+  }
 
   if (now - lastStatus >= STATUS_INTERVAL) {
     lastStatus = now;
