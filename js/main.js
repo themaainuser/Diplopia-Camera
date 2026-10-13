@@ -2,6 +2,7 @@ import { createDiplopia, defaultParams, PARAM_DEFS } from './effects/diplopia.js
 import { parseSource, openSource, sourceSize, describeCameraError, countCameras } from './camera.js';
 import { createRenderer, zoomFor, displayToSource } from './renderer.js';
 import { createDepth } from './depth.js';
+import { depthSmoothing } from './depth-math.js';
 import { capturePhoto, canRecord, createRecorder, createOutbox, browserEnv, fileName } from './capture.js';
 import {
   showMessage, hideMessage, containFit, createGestures, createPanel, loadSettings, saveSettings, formatStatus,
@@ -43,7 +44,10 @@ const state = { mode: 'whole', source: null, facing: 'environment', depthOverrid
 let recorder = null;
 let outbox = null;
 let switchingCamera = false;
-const depth = createDepth({ onStatus: onDepthStatus });
+const depth = createDepth({
+  onStatus: onDepthStatus,
+  getSmoothing: () => depthSmoothing(params.depthStrength),
+});
 let depthError = null; // why depth-aware mode is unavailable, once it has failed
 
 let renderer = null;

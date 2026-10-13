@@ -86,6 +86,7 @@ Camera frames never leave the device. The only network requests are the library 
 | `js/effects/diplopia.js` | The behaviour model: turns time and input into separation, blur, balance and blink |
 | `js/renderer.js` | WebGL drawing for both modes |
 | `js/depth.js`, `js/depth-worker.js` | Depth model loading and inference, off the main thread |
+| `js/depth-math.js` | Depth-map smoothing, shared by the page and the worker |
 | `js/camera.js` | Camera, test picture and image sources |
 | `js/capture.js` | Photo and video saving |
 | `js/ui.js` | Messages, gestures, settings panel |

@@ -86,3 +86,20 @@ test('isolated frame errors are skipped; three in a row fail the mode and stop t
   assert.equal(worker.terminated, 1);
   assert.equal(depth.map, null);
 });
+
+test('each frame carries the smoothing the worker should apply', () => {
+  const sent = [];
+  const worker = { postMessage: (m) => sent.push(m), terminate() {} };
+  let smoothing = 0.016;
+  const depth = createDepth({
+    onStatus() {}, createWorker: () => worker, getSmoothing: () => smoothing,
+    grab: () => ({ pixels: new Uint8ClampedArray(16), width: 2, height: 2 }),
+  });
+  depth.start(); worker.onmessage({ data: { type: 'ready', device: 'wasm' } });
+  depth.offer({});
+  assert.equal(sent.at(-1).smoothing, 0.016);
+  worker.onmessage({ data: { type: 'depth', data: new Uint8Array(4), width: 2, height: 2 } });
+  smoothing = 0.048;
+  depth.offer({});
+  assert.equal(sent.at(-1).smoothing, 0.048);
+});

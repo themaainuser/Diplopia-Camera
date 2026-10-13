@@ -188,6 +188,11 @@ The low-resolution, smoothed depth map keeps this soft. This is accepted.
 - `depth.js` sends a downscaled frame to the worker only when the previous
   result has come back. There is no queue, so the depth rate adapts to the
   device.
+- The worker smooths each depth map with a Gaussian before returning it. A raw
+  map has hard object outlines and fine ripples, and using it to shift pixels
+  tears the picture along them. The smoothing grows with the depth doubling
+  strength (0.4 times the strength, at least 1% of the width), so a stronger
+  shift never folds the picture over itself.
 - The worker returns a depth map normalised to 0..1. Each new map is blended
   with the previous one to reduce flicker, then uploaded as a texture.
 - The fixation point defaults to the centre of the frame. Its depth is re-read

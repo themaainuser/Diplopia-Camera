@@ -58,7 +58,13 @@ function createGrabber() {
   };
 }
 
-export function createDepth({ onStatus = () => {}, createWorker = defaultWorker, grab = createGrabber() } = {}) {
+// `getSmoothing` says how much the worker should smooth each depth map, as a fraction of the map's width.
+export function createDepth({
+  onStatus = () => {},
+  createWorker = defaultWorker,
+  grab = createGrabber(),
+  getSmoothing = () => 0,
+} = {}) {
   let worker = null;
   let active = false;
   let waiting = false; // a frame is with the worker; nothing else is sent until it answers
@@ -150,7 +156,10 @@ export function createDepth({ onStatus = () => {}, createWorker = defaultWorker,
     }
     if (!frame) return;
     waiting = true;
-    worker.postMessage({ type: 'frame', pixels: frame.pixels, width: frame.width, height: frame.height }, [frame.pixels.buffer]);
+    worker.postMessage(
+      { type: 'frame', pixels: frame.pixels, width: frame.width, height: frame.height, smoothing: getSmoothing() },
+      [frame.pixels.buffer],
+    );
   }
 
   function setFixationPoint(u, v) {

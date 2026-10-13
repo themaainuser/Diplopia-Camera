@@ -1,6 +1,8 @@
 // Runs the depth model off the main thread, so the picture never stutters.
 // This is the only file in the app that loads code from the network.
 
+import { smoothDepth } from './depth-math.js';
+
 const LIBRARY = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0';
 const MODEL = 'onnx-community/depth-anything-v2-small';
 
@@ -54,11 +56,13 @@ function warmUpImage() {
   return new RawImage(pixels, size, size, 4);
 }
 
-async function estimate({ pixels, width, height }) {
+async function estimate({ pixels, width, height, smoothing = 0 }) {
   const image = new RawImage(pixels, width, height, 4);
   const { depth } = await estimator(image);
   // `depth` is a one-channel image scaled to 0..255, brighter meaning nearer.
-  const data = depth.data instanceof Uint8Array ? depth.data : new Uint8Array(depth.data);
+  const raw = depth.data instanceof Uint8Array ? depth.data : new Uint8Array(depth.data);
+  // The raw map has hard object outlines and fine ripples. Used as it is, it tears the picture along them.
+  const data = smoothDepth(raw, depth.width, depth.height, smoothing * depth.width);
   self.postMessage({ type: 'depth', data, width: depth.width, height: depth.height }, [data.buffer]);
 }
 
