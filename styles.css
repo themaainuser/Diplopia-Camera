@@ -205,6 +205,25 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+/* A short line above the bar: loading progress, or why something is unavailable. */
+#notice {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bar-space) + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 1;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-strong);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  text-wrap: balance;
+}
+
 /* Settings */
 
 #panel {

@@ -1,11 +1,13 @@
 import { createDiplopia, defaultParams, PARAM_DEFS } from './effects/diplopia.js';
 import { parseSource, openSource, sourceSize, describeCameraError, countCameras } from './camera.js';
-import { createRenderer } from './renderer.js';
+import { createRenderer, zoomFor, displayToSource } from './renderer.js';
+import { createDepth } from './depth.js';
 import {
   showMessage, hideMessage, containFit, createGestures, createPanel, loadSettings, saveSettings, formatStatus,
 } from './ui.js';
 
 const STATUS_INTERVAL = 250; // milliseconds between status line updates
+const NOTICE_TIME = 8000; // milliseconds a one-off notice stays up
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('view');
@@ -13,6 +15,7 @@ const stage = $('stage');
 const message = $('message');
 const panelEl = $('panel');
 const statusEl = $('status');
+const noticeEl = $('notice');
 const cameraSwitch = $('camera-switch');
 const modeButtons = { whole: $('mode-whole'), depth: $('mode-depth') };
 
@@ -30,6 +33,8 @@ try {
 const params = loadSettings(storage);
 const model = createDiplopia({ params });
 const state = { mode: 'whole', source: null, facing: 'environment', depthOverride: null };
+const depth = createDepth({ onStatus: onDepthStatus });
+let depthError = null; // why depth-aware mode is unavailable, once it has failed
 
 let renderer = null;
 try {
@@ -96,12 +101,46 @@ async function switchCamera() {
   }
 }
 
+// A short line above the bar. With `lasting` it stays until replaced; otherwise it clears itself.
+let noticeTimer = 0;
+function showNotice(text, { lasting = false } = {}) {
+  clearTimeout(noticeTimer);
+  noticeEl.textContent = text;
+  noticeEl.hidden = !text;
+  if (text && !lasting) noticeTimer = setTimeout(() => showNotice(''), NOTICE_TIME);
+}
+
 function setMode(mode) {
   state.mode = mode;
   for (const [name, button] of Object.entries(modeButtons)) {
     button.setAttribute('aria-pressed', String(name === mode));
   }
   document.body.classList.toggle('depth-mode', mode === 'depth');
+  if (mode === 'depth') depth.start();
+  else depth.stop();
+  showLoading(depth.status);
+}
+
+// The model is fetched the first time depth-aware mode is chosen; the whole-frame picture keeps running meanwhile.
+let loadingShown = false;
+function showLoading(status) {
+  const loading = state.mode === 'depth' && status.state === 'loading';
+  modeButtons.depth.setAttribute('aria-busy', String(loading));
+  if (loading) showNotice(`Loading depth model ${Math.round(status.percent)}%`, { lasting: true });
+  else if (loadingShown) showNotice('');
+  loadingShown = loading;
+}
+
+function onDepthStatus(status) {
+  if (status.state === 'error' && !depthError) {
+    depthError = `Depth-aware mode is unavailable: ${status.message}`;
+    modeButtons.depth.disabled = true;
+    modeButtons.depth.title = depthError;
+    setMode('whole');
+    showNotice(depthError);
+    return;
+  }
+  showLoading(status);
 }
 
 function setUpControls() {
@@ -118,9 +157,15 @@ function setUpControls() {
   });
 
   // Dragging right moves the two images apart, left brings them together. A tap blinks and refocuses.
+  // In depth-aware mode the tapped spot also becomes what the eyes are looking at.
   createGestures(canvas, {
     onDrag: (fraction) => model.push(fraction),
-    onTap: () => model.refocus(),
+    onTap: (u, v) => {
+      model.refocus();
+      if (state.mode !== 'depth' || !state.source) return;
+      const point = displayToSource(u, v, { zoom: zoomFor(params, 'depth'), mirror: state.source.mirrored });
+      depth.setFixationPoint(point.u, point.v);
+    },
   });
 
   window.addEventListener('keydown', (event) => {
@@ -157,25 +202,28 @@ function frame(now) {
   }
 
   const frameState = model.update(dt);
-  const depth = state.depthOverride;
+  if (state.mode === 'depth') depth.offer(source.element);
+  // Until the first depth map arrives, depth-aware mode draws as whole-frame.
+  const depthMap = state.depthOverride ?? (state.mode === 'depth' ? depth.map : null);
   renderer.render(source.element, frameState, {
     params,
-    mode: depth ? 'depth' : 'whole',
+    mode: depthMap ? 'depth' : 'whole',
     mirror: source.mirrored,
-    depth,
+    depth: depthMap,
     showDepth,
   });
 
   if (now - lastStatus >= STATUS_INTERVAL) {
     lastStatus = now;
-    statusEl.textContent = formatStatus({ phase: frameState.phase, mode: state.mode, depth: null });
+    const line = formatStatus({ phase: frameState.phase, mode: state.mode, depth: depth.status });
+    statusEl.textContent = depthError ? `${line} · ${depthError}` : line;
   }
 }
 
 if (renderer) {
   window.addEventListener('resize', fit);
   setUpControls();
-  window.__app = { model, params, renderer, state };
+  window.__app = { model, params, renderer, state, depth };
   openCurrentSource();
   requestAnimationFrame(frame);
 }
