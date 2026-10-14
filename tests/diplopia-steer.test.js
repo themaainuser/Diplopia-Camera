@@ -84,6 +84,23 @@ test('ten minutes of random steering stays in range', () => {
   });
 });
 
+import { blinkCurve } from '../js/effects/blink.js';
+
+test('reset returns to a single view and starts a new delay', () => {
+  const m = make(still); toDrifting(m);
+  m.push(0.03); m.reset();
+  assert.deepEqual(m.state, { separation: { x: 0, y: 0 }, blur: 0, balance: 0.5, blink: 0, relax: 0, phase: 'focused' });
+  const t = onsetTime(m);
+  assert.ok(t >= 2 - STEP && t <= 6 + STEP);
+  assert.ok(near(run(m, 1.5 + 2).separation.x, 0.035));   // the push was forgotten
+});
+
+test('the refocus blink is the shared blink curve', () => {
+  const m = make(still); toDrifting(m); m.refocus();
+  let t = 0;
+  run(m, 0.3, (s) => { t += STEP; if (s.phase === 'refocusing') assert.ok(Math.abs(s.blink - blinkCurve(t)) < 1e-9); });
+});
+
 test('a push that is not a finite number is ignored', () => {
   const m = make(still); toDrifting(m);
   for (const bad of [NaN, Infinity, -Infinity, undefined]) m.push(bad);

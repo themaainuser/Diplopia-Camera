@@ -1,6 +1,8 @@
 // Physiological diplopia: the behaviour model.
 // Pure logic. Distances are fractions of frame width, times are seconds.
 
+import { blinkCurve } from './blink.js';
+
 export const MAX_SEPARATION = 0.2;
 export const BREAKAWAY_RATIO = 1.5;
 
@@ -25,9 +27,6 @@ const TREMOR = 0.0003;
 const BALANCE_WOBBLE = 0.05;
 const BLUR_LEAD = 0.7; // blur completes in this fraction of the onset, so softening precedes the split
 const REFOCUS_DURATION = 0.35;
-const BLINK_CLOSED_AT = 0.08;
-const BLINK_OPENS_AT = 0.14;
-const BLINK_OPEN_TIME = 0.16;
 const TAU = Math.PI * 2;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -104,10 +103,7 @@ export function createDiplopia({ params, random = Math.random }) {
     }
     const u = tRef / REFOCUS_DURATION;
     const left = 1 - easeOutBack(u);
-    const blink =
-      tRef < BLINK_CLOSED_AT ? tRef / BLINK_CLOSED_AT
-      : tRef < BLINK_OPENS_AT ? 1
-      : Math.max(0, 1 - (tRef - BLINK_OPENS_AT) / BLINK_OPEN_TIME);
+    const blink = blinkCurve(tRef);
     return {
       separation: { x: from.separation.x * left, y: from.separation.y * left },
       blur: from.blur * (1 - u),
@@ -146,10 +142,19 @@ export function createDiplopia({ params, random = Math.random }) {
     tRef = 0;
   }
 
+  // Back to a single view at once, with a fresh wait before the eyes relax again.
+  function reset() {
+    phase = 'focused';
+    delay = drawDelay();
+    userOffset = 0;
+    state = atRest();
+  }
+
   return {
     update,
     push,
     refocus,
+    reset,
     get state() {
       return state;
     },
