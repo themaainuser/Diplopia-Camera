@@ -1,6 +1,6 @@
 import { createDiplopia } from './effects/diplopia.js';
 import { EFFECTS, defaultParams } from './effects/index.js';
-import { afterimageRates } from './effects/afterimage.js';
+import { createMemoryClock } from './effects/afterimage.js';
 import { createBlink } from './effects/blink.js';
 import { parseSource, openSource, sourceSize, describeCameraError, countCameras } from './camera.js';
 import { createRenderer, zoomFor, displayToSource } from './renderer.js';
@@ -53,6 +53,7 @@ const depth = createDepth({
 });
 let depthError = null; // why depth-aware mode is unavailable, once it has failed
 const blink = createBlink(); // the blink on every tap or Space, whatever the effects are doing
+const memoryClock = createMemoryClock(); // afterimage memory steps, the same at any frame rate
 
 const doubleVisionOn = () => params.diplopiaOn === 1;
 const afterimagesOn = () => params.afterimageOn === 1 && Boolean(renderer?.supportsAfterimage);
@@ -365,7 +366,7 @@ function frame(now) {
           strength: params.afterStrength,
           steady: params.afterSteady,
           selectivity: params.afterSelectivity,
-          ...afterimageRates(dt, params),
+          ...memoryClock.advance(dt, params),
         }
       : null,
   });
