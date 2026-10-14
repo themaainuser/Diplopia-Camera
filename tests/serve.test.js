@@ -6,8 +6,8 @@ import path from 'node:path';
 import { locate, serverOptions, lanAddresses } from '../tools/serve.js';
 
 test('normal mode stays on this computer; phone mode serves HTTPS on the network', () => {
-  assert.deepEqual(serverOptions([], {}), { https: false, host: '127.0.0.1', port: 8080 });
-  assert.deepEqual(serverOptions(['--phone'], {}), { https: true, host: '0.0.0.0', port: 8443 });
+  assert.deepEqual(serverOptions([], {}), { https: false, host: '127.0.0.1', port: 8443 });
+  assert.deepEqual(serverOptions(['--phone'], {}), { https: true, host: '0.0.0.0', port: 8080 });
   assert.deepEqual(serverOptions(['--phone'], { PORT: '9000' }), { https: true, host: '0.0.0.0', port: 9000 });
 });
 

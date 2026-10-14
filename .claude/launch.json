@@ -5,7 +5,7 @@
       "name": "cam-app",
       "runtimeExecutable": "node",
       "runtimeArgs": ["tools/serve.js"],
-      "port": 8080
+      "port": 8443
     }
   ]
 }
