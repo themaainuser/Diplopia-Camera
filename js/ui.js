@@ -79,10 +79,10 @@ export function spaceRefocuses(target) {
   return control.tagName === 'INPUT' && control.type === 'range';
 }
 
-// A mouse or touch click leaves focus on the button, which would then swallow the next Space.
+// A mouse or touch click leaves focus on the button or switch, which would then swallow the next Space.
 // Give the focus back. A button reached with the keyboard keeps it.
 export function releasePointerFocus(event) {
-  if (event.detail > 0) event.target?.closest?.('button')?.blur();
+  if (event.detail > 0) event.target?.closest?.('button, input[type="checkbox"]')?.blur();
 }
 
 export function formatValue(def, value) {
@@ -98,9 +98,13 @@ export function formatValue(def, value) {
   }
 }
 
-// One labelled slider per parameter. Sliders write straight into `params`, which the model reads live.
-export function createPanel(container, { defs, params, onChange }) {
-  const rows = defs.map((def) => {
+// The settings panel: one section per effect, headed by its on/off switch, holding its sliders.
+// Switches and sliders write straight into `params`, which the effects read live.
+// `unavailable` maps an effect id to the reason it cannot run here; its switch is then disabled.
+export function createPanel(container, { effects, params, onChange, unavailable = {} }) {
+  const sliders = [];
+
+  function addSlider(parent, def) {
     const row = document.createElement('div');
     row.className = def.depthOnly ? 'row depth-only' : 'row';
 
@@ -130,12 +134,58 @@ export function createPanel(container, { defs, params, onChange }) {
     });
 
     row.append(label, output, input);
-    container.append(row);
-    return { def, input, output };
+    parent.append(row);
+    sliders.push({ def, input, output });
+  }
+
+  const sections = effects.map((effect) => {
+    const section = document.createElement('section');
+    section.className = 'effect';
+
+    const head = document.createElement('div');
+    head.className = 'effect-head';
+    const id = 'switch-' + effect.id;
+    const label = document.createElement('label');
+    label.htmlFor = id;
+    label.textContent = effect.label;
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.id = id;
+    toggle.setAttribute('role', 'switch');
+    head.append(label, toggle);
+    section.append(head);
+
+    const reason = unavailable[effect.id];
+    toggle.disabled = Boolean(reason);
+    if (reason) {
+      const note = document.createElement('p');
+      note.className = 'reason';
+      note.textContent = reason;
+      section.append(note);
+    }
+
+    const rows = document.createElement('div');
+    rows.className = 'rows';
+    for (const def of effect.defs) addSlider(rows, def);
+    section.append(rows);
+
+    toggle.addEventListener('change', () => {
+      params[effect.switchKey] = toggle.checked ? 1 : 0;
+      refresh();
+      onChange?.(effect.switchKey, params[effect.switchKey]);
+    });
+
+    container.append(section);
+    return { effect, section, toggle, available: !reason };
   });
 
   function refresh() {
-    for (const { def, input, output } of rows) {
+    for (const { effect, section, toggle, available } of sections) {
+      const on = available && params[effect.switchKey] === 1;
+      toggle.checked = on;
+      section.classList.toggle('off', !on);
+    }
+    for (const { def, input, output } of sliders) {
       input.value = params[def.key];
       output.textContent = formatValue(def, params[def.key]);
     }
@@ -162,7 +212,8 @@ export function saveSettings(storage, params) {
   }
 }
 
-export function formatStatus({ phase, mode, depth }) {
+export function formatStatus({ phase, mode, depth, doubleVision = true }) {
+  if (!doubleVision) return 'double vision off';
   if (mode !== 'depth' || !depth) return phase;
   if (depth.state === 'loading') return `${phase} · loading depth model ${Math.round(depth.percent ?? 0)}%`;
   if (depth.state === 'ready') return `${phase} · depth ${Math.round(depth.rate ?? 0)}/s (${depth.device})`;

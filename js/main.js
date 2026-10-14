@@ -1,5 +1,7 @@
 import { createDiplopia } from './effects/diplopia.js';
 import { EFFECTS, defaultParams } from './effects/index.js';
+import { afterimageRates } from './effects/afterimage.js';
+import { createBlink } from './effects/blink.js';
 import { parseSource, openSource, sourceSize, describeCameraError, countCameras } from './camera.js';
 import { createRenderer, zoomFor, displayToSource } from './renderer.js';
 import { createDepth } from './depth.js';
@@ -50,6 +52,10 @@ const depth = createDepth({
   getSmoothing: () => depthSmoothing(params.depthStrength),
 });
 let depthError = null; // why depth-aware mode is unavailable, once it has failed
+const blink = createBlink(); // the blink on every tap or Space, whatever the effects are doing
+
+const doubleVisionOn = () => params.diplopiaOn === 1;
+const afterimagesOn = () => params.afterimageOn === 1 && Boolean(renderer?.supportsAfterimage);
 
 let renderer = null;
 try {
@@ -227,9 +233,19 @@ function setMode(mode) {
     button.setAttribute('aria-pressed', String(name === mode));
   }
   document.body.classList.toggle('depth-mode', mode === 'depth');
-  if (mode === 'depth') depth.start();
+  // Depth estimation only runs while double vision is on; the chosen mode is kept for when it returns.
+  if (mode === 'depth' && doubleVisionOn()) depth.start();
   else depth.stop();
   showLoading(depth.status);
+}
+
+// Off returns the view to single at once and pauses depth estimation. On starts a fresh wait.
+function applyDoubleVision() {
+  const on = doubleVisionOn();
+  modeButtons.whole.disabled = !on;
+  modeButtons.depth.disabled = !on || Boolean(depthError);
+  if (!on) model.reset();
+  setMode(state.mode);
 }
 
 // The model is fetched the first time depth-aware mode is chosen; the whole-frame picture keeps running meanwhile.
@@ -255,23 +271,36 @@ function onDepthStatus(status) {
 }
 
 function setUpControls() {
+  const unavailable = renderer.supportsAfterimage
+    ? {}
+    : { afterimage: "This device's graphics cannot keep the slow memory this effect needs." };
   const panel = createPanel($('sliders'), {
-    defs: EFFECTS[0].defs,
+    effects: EFFECTS,
     params,
-    onChange: () => saveSettings(storage, params),
+    unavailable,
+    onChange: (key) => {
+      saveSettings(storage, params);
+      if (key === 'diplopiaOn') applyDoubleVision();
+    },
   });
 
   $('reset').addEventListener('click', () => {
     Object.assign(params, defaultParams());
     saveSettings(storage, params);
     panel.refresh();
+    applyDoubleVision();
   });
 
-  // Dragging right moves the two images apart, left brings them together. A tap blinks and refocuses.
-  // In depth-aware mode the tapped spot also becomes what the eyes are looking at.
+  // Dragging right moves the two images apart, left brings them together. A tap always blinks,
+  // and with double vision on it also refocuses. In depth-aware mode the tapped spot becomes
+  // what the eyes are looking at.
   createGestures(canvas, {
-    onDrag: (fraction) => model.push(fraction),
+    onDrag: (fraction) => {
+      if (doubleVisionOn()) model.push(fraction);
+    },
     onTap: (u, v) => {
+      blink.trigger();
+      if (!doubleVisionOn()) return;
       model.refocus();
       if (state.mode !== 'depth' || !state.source) return;
       const zoom = renderer.zoom ?? zoomFor(params, 'depth');
@@ -283,7 +312,8 @@ function setUpControls() {
   window.addEventListener('keydown', (event) => {
     if (event.code !== 'Space' || event.repeat || !spaceRefocuses(event.target)) return;
     event.preventDefault();
-    model.refocus();
+    blink.trigger();
+    if (doubleVisionOn()) model.refocus();
   });
   // Without this, the button last clicked would take the next Space instead of the blink.
   document.addEventListener('click', releasePointerFocus);
@@ -318,15 +348,26 @@ function frame(now) {
     fit();
   }
 
-  const frameState = model.update(dt);
-  if (state.mode === 'depth') depth.offer(source.element);
+  const doubleVision = doubleVisionOn();
+  const frameState = doubleVision ? model.update(dt) : null;
+  // The standalone blink and the refocus blink follow the same curve; whichever is darker shows.
+  const darkness = Math.max(blink.update(dt), frameState ? frameState.blink : 0);
+  if (doubleVision && state.mode === 'depth') depth.offer(source.element);
   // Until the first depth map arrives, depth-aware mode draws as whole-frame.
-  const depthMap = state.depthOverride ?? (state.mode === 'depth' ? depth.map : null);
+  const depthMap = doubleVision ? state.depthOverride ?? (state.mode === 'depth' ? depth.map : null) : null;
   renderer.render(source.element, {
     mirror: source.mirrored,
-    blink: frameState.blink,
+    blink: darkness,
     showDepth,
-    diplopia: { frame: frameState, params, mode: depthMap ? 'depth' : 'whole', depth: depthMap },
+    diplopia: frameState ? { frame: frameState, params, mode: depthMap ? 'depth' : 'whole', depth: depthMap } : null,
+    afterimage: afterimagesOn()
+      ? {
+          strength: params.afterStrength,
+          steady: params.afterSteady,
+          selectivity: params.afterSelectivity,
+          ...afterimageRates(dt, params),
+        }
+      : null,
   });
 
   // The photo is taken here, straight after drawing, while the canvas still holds this frame.
@@ -337,7 +378,7 @@ function frame(now) {
 
   if (now - lastStatus >= STATUS_INTERVAL) {
     lastStatus = now;
-    const line = formatStatus({ phase: frameState.phase, mode: state.mode, depth: depth.status });
+    const line = formatStatus({ phase: frameState?.phase, mode: state.mode, depth: depth.status, doubleVision });
     statusEl.textContent = depthError ? `${line} · ${depthError}` : line;
   }
 }
@@ -345,7 +386,8 @@ function frame(now) {
 if (renderer) {
   window.addEventListener('resize', fit);
   setUpControls();
-  window.__app = { model, params, renderer, state, depth };
+  applyDoubleVision();
+  window.__app = { model, params, renderer, state, depth, blink };
   openCurrentSource();
   requestAnimationFrame(frame);
 }

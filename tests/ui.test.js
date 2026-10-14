@@ -76,6 +76,21 @@ test('a pointer that cannot be captured still gives a tap', () => {
 
 import { spaceRefocuses, releasePointerFocus } from '../js/ui.js';
 
+test('a pointer click on a switch gives focus back too', () => {
+  const box = {
+    tagName: 'INPUT', type: 'checkbox', blurred: 0,
+    blur() { this.blurred++; },
+    closest(selector) { return selector.split(',').some((s) => s.trim() === 'input[type="checkbox"]') ? this : null; },
+  };
+  releasePointerFocus({ detail: 1, target: box });
+  assert.equal(box.blurred, 1);
+});
+
+test('formatStatus says so when double vision is off', () => {
+  assert.equal(formatStatus({ phase: undefined, mode: 'depth', depth: { state: 'ready', rate: 12, device: 'webgpu' }, doubleVision: false }), 'double vision off');
+  assert.equal(formatStatus({ phase: 'drifting', mode: 'whole', depth: null, doubleVision: true }), 'drifting');
+});
+
 const control = (tagName, type) => ({
   tagName, type, blurred: 0,
   blur() { this.blurred++; },

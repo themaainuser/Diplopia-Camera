@@ -289,6 +289,79 @@ button:disabled {
   cursor: pointer;
 }
 
+/* One section per effect, headed by its on/off switch. */
+.effect + .effect {
+  margin-top: 14px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.effect-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.effect-head label {
+  font-size: 15px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.effect-head input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 26px;
+  margin: 9px 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.effect-head input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 150ms ease;
+}
+
+.effect-head input[type="checkbox"]:checked {
+  background: var(--text);
+}
+
+.effect-head input[type="checkbox"]:checked::after {
+  transform: translateX(18px);
+  background: #111;
+}
+
+.effect-head input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.reason {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* A switched-off effect hides its sliders. */
+.effect.off .rows {
+  display: none;
+}
+
 /* The depth sliders only matter in depth-aware mode. */
 body:not(.depth-mode) .depth-only {
   display: none;
