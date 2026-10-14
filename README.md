@@ -92,10 +92,13 @@ A test picture has no real depth, so judge depth-aware mode with a camera or a r
 
 ## On a phone
 
-Browsers only allow the camera on `localhost` or over HTTPS, so opening your computer's address from a phone will not work. Two ways around it:
+Browsers only allow the camera on `localhost` or over HTTPS, so `npm start` (plain HTTP, this computer only) will not work from a phone. Three ways around it:
 
-1. Upload this folder to any static host that serves HTTPS, for example GitHub Pages.
-2. Run `npm start` and expose port 8080 through an HTTPS tunnel, for example `cloudflared tunnel --url http://localhost:8080`, then open the tunnel's address on the phone.
+1. **Same network.** Run `npm run start:phone`. It serves the app over HTTPS on port 8443 to your local network and prints the address to open on the phone, such as `https://10.29.36.235:8443`. The phone must be on the same network as this computer.
+   - The first run makes a certificate in `.certs/` (never served, never committed). It is made on this computer and trusted by nothing, so the phone says the connection is not private: choose Advanced, then Proceed, then allow the camera.
+   - Windows Firewall must let Node.js accept connections. On a network marked Public it usually does not; if the phone cannot connect, mark the network as Private in Windows settings (only on a network you trust) and allow Node.js on private networks.
+2. Upload this folder to any static host that serves HTTPS, for example GitHub Pages.
+3. Run `npm start` and expose port 8080 through an HTTPS tunnel, for example `cloudflared tunnel --url http://localhost:8080`, then open the tunnel's address on the phone. Anyone with that address can open the app while the tunnel runs.
 
 The local server only serves the app's own files (HTML, CSS, JavaScript and images) and never anything inside dot-folders such as `.git`, so tunnelling it does not expose the rest of the folder.
 

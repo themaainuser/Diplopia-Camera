@@ -3,7 +3,25 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { locate } from '../tools/serve.js';
+import { locate, serverOptions, lanAddresses } from '../tools/serve.js';
+
+test('normal mode stays on this computer; phone mode serves HTTPS on the network', () => {
+  assert.deepEqual(serverOptions([], {}), { https: false, host: '127.0.0.1', port: 8080 });
+  assert.deepEqual(serverOptions(['--phone'], {}), { https: true, host: '0.0.0.0', port: 8443 });
+  assert.deepEqual(serverOptions(['--phone'], { PORT: '9000' }), { https: true, host: '0.0.0.0', port: 9000 });
+});
+
+test('lanAddresses lists the IPv4 addresses other devices can reach', () => {
+  const interfaces = {
+    Ethernet: [
+      { family: 'IPv4', address: '10.29.36.235', internal: false },
+      { family: 'IPv6', address: 'fe80::1', internal: false },
+    ],
+    Loopback: [{ family: 'IPv4', address: '127.0.0.1', internal: true }],
+    'Wi-Fi': [{ family: 4, address: '192.168.1.20', internal: false }],
+  };
+  assert.deepEqual(lanAddresses(interfaces), ['10.29.36.235', '192.168.1.20']);
+});
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'serve-test-'));

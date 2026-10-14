@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "start": "node tools/serve.js"
+    "start": "node tools/serve.js",
+    "start:phone": "node tools/serve.js --phone"
   }
 }
