@@ -1,7 +1,7 @@
 // Interface pieces: messages, layout, gestures, the settings panel and saved settings.
 // Functions take the elements they work on, so nothing here touches the page at import time.
 
-import { sanitizeParams } from './effects/diplopia.js';
+import { sanitizeParams } from './effects/index.js';
 
 const ACTION_LABELS = { retry: 'Try again', test: 'Use the test picture' };
 const SETTINGS_KEY = 'diplopia.settings.v1';

@@ -19,22 +19,6 @@ export const PARAM_DEFS = [
   { key: 'depthBlur', label: 'Depth blur', min: 0, max: 0.02, step: 0.0005, value: 0.006, format: 'percent', depthOnly: true },
 ];
 
-export function defaultParams() {
-  return Object.fromEntries(PARAM_DEFS.map((d) => [d.key, d.value]));
-}
-
-// Turns anything (saved settings, user input) into a complete, in-range parameter set.
-export function sanitizeParams(raw) {
-  const src = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
-  const out = {};
-  for (const d of PARAM_DEFS) {
-    const v = src[d.key];
-    out[d.key] = typeof v === 'number' && Number.isFinite(v) ? Math.min(d.max, Math.max(d.min, v)) : d.value;
-  }
-  out.delayMin = Math.min(out.delayMin, out.delayMax);
-  return out;
-}
-
 const MAX_STEP = 0.1; // longest time one update may cover; a hidden tab resumes without a jump
 const FOLLOW_RATE = 10; // how quickly the shown separation follows its target, per second
 const TREMOR = 0.0003;

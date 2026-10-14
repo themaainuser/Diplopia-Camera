@@ -9,7 +9,8 @@ test('containFit keeps the source proportions inside the stage', () => {
 });
 
 import { createGestures, formatValue, loadSettings, saveSettings, formatStatus } from '../js/ui.js';
-import { defaultParams, PARAM_DEFS } from '../js/effects/diplopia.js';
+import { PARAM_DEFS } from '../js/effects/diplopia.js';
+import { defaultParams } from '../js/effects/index.js';
 
 const fakeEl = () => {
   const h = {};

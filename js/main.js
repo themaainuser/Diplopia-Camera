@@ -1,4 +1,5 @@
-import { createDiplopia, defaultParams, PARAM_DEFS } from './effects/diplopia.js';
+import { createDiplopia } from './effects/diplopia.js';
+import { EFFECTS, defaultParams } from './effects/index.js';
 import { parseSource, openSource, sourceSize, describeCameraError, countCameras } from './camera.js';
 import { createRenderer, zoomFor, displayToSource } from './renderer.js';
 import { createDepth } from './depth.js';
@@ -255,7 +256,7 @@ function onDepthStatus(status) {
 
 function setUpControls() {
   const panel = createPanel($('sliders'), {
-    defs: PARAM_DEFS,
+    defs: EFFECTS[0].defs,
     params,
     onChange: () => saveSettings(storage, params),
   });
