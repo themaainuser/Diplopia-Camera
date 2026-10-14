@@ -1,9 +1,11 @@
-// Runs the render passes for one frame: uploads the source frame, then draws double vision
-// (or the plain picture) to the screen. Owns the WebGL context and rebuilds everything after a context loss.
+// Runs the render passes for one frame: uploads the source frame, draws double vision (or the
+// plain picture), and, with afterimages on, draws that into a hidden buffer that the afterimage
+// pass turns into what reaches the screen. Owns the WebGL context and rebuilds everything after a context loss.
 // It never reads the clock: everything that depends on time arrives in the render call.
 
-import { createContext, makeTexture, setUpQuad } from './gl.js';
+import { createContext, makeTexture, makeTarget, deleteTarget, setUpQuad } from './gl.js';
 import { createDiplopiaPass, zoomFor } from './passes/diplopia.js';
+import { createAfterimagePass } from './passes/afterimage.js';
 
 export { zoomFor, blurScale, displayToSource } from './passes/diplopia.js';
 
@@ -25,6 +27,9 @@ export function createRenderer(canvas) {
   let lost = false;
   let videoTexture;
   let diplopia;
+  let afterimage;
+  let scene = null; // the finished picture, before afterimages are applied
+  let afterimageWasOn = false;
   let zoom = null;
 
   // Everything that dies with the GL context is built here, so it can be rebuilt after a context loss.
@@ -34,6 +39,9 @@ export function createRenderer(canvas) {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     videoTexture = makeTexture(ctx);
     diplopia = createDiplopiaPass(ctx);
+    afterimage = createAfterimagePass(ctx);
+    scene = null;
+    afterimageWasOn = false;
   }
 
   canvas.addEventListener('webglcontextlost', (event) => {
@@ -59,8 +67,18 @@ export function createRenderer(canvas) {
     if (mipmapped) gl.generateMipmap(gl.TEXTURE_2D);
   }
 
+  function ensureScene(width, height) {
+    if (scene && scene.width === width && scene.height === height) return;
+    deleteTarget(ctx, scene);
+    scene = makeTarget(ctx, width, height);
+  }
+
   // `diplopia` is null for the plain picture, or { frame, params, mode, depth }.
-  function render(element, { mirror = false, blink = 0, showDepth = false, diplopia: doubleVision = null } = {}) {
+  // `afterimage` is null, or { strength, steady, selectivity, build, fade } with this frame's rates.
+  function render(
+    element,
+    { mirror = false, blink = 0, showDepth = false, diplopia: doubleVision = null, afterimage: ghost = null } = {},
+  ) {
     if (lost) return;
     const width = gl.drawingBufferWidth;
     const height = gl.drawingBufferHeight;
@@ -74,7 +92,18 @@ export function createRenderer(canvas) {
     const targetZoom = zoomFor(desc.params, useDepth ? 'depth' : 'whole', desc.frame.separation.x);
     zoom = zoom === null ? targetZoom : zoom + (targetZoom - zoom) * ZOOM_EASE;
 
-    diplopia.draw(videoTexture, { ...desc, mirror, blink, showDepth, zoom, width, height }, null);
+    const frame = { ...desc, mirror, blink, showDepth, zoom, width, height };
+    const withAfterimage = ghost !== null && afterimage.supported && !showDepth;
+    if (withAfterimage) {
+      ensureScene(width, height);
+      diplopia.draw(videoTexture, frame, scene);
+      afterimage.draw(scene, { ...ghost, blink }, width, height);
+    } else {
+      diplopia.draw(videoTexture, frame, null);
+      // Switching afterimages back on later starts from an empty memory, not a stale ghost.
+      if (afterimageWasOn) afterimage.clear();
+    }
+    afterimageWasOn = withAfterimage;
   }
 
   return {
@@ -85,7 +114,7 @@ export function createRenderer(canvas) {
       return zoom;
     },
     get supportsAfterimage() {
-      return false;
+      return afterimage.supported;
     },
   };
 }
