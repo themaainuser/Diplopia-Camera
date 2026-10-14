@@ -160,8 +160,11 @@ export function createPanel(container, { effects, params, onChange, unavailable 
     if (reason) {
       const note = document.createElement('p');
       note.className = 'reason';
+      note.id = 'reason-' + effect.id;
       note.textContent = reason;
       section.append(note);
+      // Screen readers announce why the switch is disabled when it is reached.
+      toggle.setAttribute('aria-describedby', note.id);
     }
 
     const rows = document.createElement('div');

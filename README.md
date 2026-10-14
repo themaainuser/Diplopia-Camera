@@ -78,7 +78,8 @@ To see one: hold the camera still on a lamp, a bright window or something strong
 - The ghost is fixed to the screen, not to the scene, the way an afterimage follows your eye: it stays put while the view moves under it.
 - Ordinary textures and mid-tones leave almost nothing; what counts is how much a thing stands out from the average of the scene.
 - The effect needs graphics support for high-precision (half-float) buffers. Almost every current device has it; where it is missing, the Afterimages switch is disabled with the reason shown.
-- Switching camera or rotating the phone clears any ghost.
+- Rotating the phone, or switching to a camera with a different picture size, clears any ghost. Switching between cameras with the same picture size keeps it for a moment, the way an afterimage stays when you look somewhere else.
+- Switching Afterimages off and on again always starts from a clear view.
 
 ## URL options
 

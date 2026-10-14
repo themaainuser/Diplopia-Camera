@@ -98,7 +98,14 @@ test('reset returns to a single view and starts a new delay', () => {
 test('the refocus blink is the shared blink curve', () => {
   const m = make(still); toDrifting(m); m.refocus();
   let t = 0;
-  run(m, 0.3, (s) => { t += STEP; if (s.phase === 'refocusing') assert.ok(Math.abs(s.blink - blinkCurve(t)) < 1e-9); });
+  let checked = 0;
+  run(m, 0.3, (s) => {
+    t += STEP;
+    if (s.phase !== 'refocusing') return;
+    assert.ok(Math.abs(s.blink - blinkCurve(t)) < 1e-9);
+    checked += 1;
+  });
+  assert.ok(checked >= 15, `only ${checked} refocusing frames were checked`);
 });
 
 test('a push that is not a finite number is ignored', () => {

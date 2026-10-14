@@ -116,5 +116,9 @@ export function createRenderer(canvas) {
     get supportsAfterimage() {
       return afterimage.supported;
     },
+    // Forgets any ghost now, even if no frame is drawn in between (for example while the camera is switching).
+    clearAfterimage() {
+      if (!lost) afterimage.clear();
+    },
   };
 }

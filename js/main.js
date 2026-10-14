@@ -56,7 +56,6 @@ const blink = createBlink(); // the blink on every tap or Space, whatever the ef
 const memoryClock = createMemoryClock(); // afterimage memory steps, the same at any frame rate
 
 const doubleVisionOn = () => params.diplopiaOn === 1;
-const afterimagesOn = () => params.afterimageOn === 1 && Boolean(renderer?.supportsAfterimage);
 
 let renderer = null;
 try {
@@ -64,6 +63,7 @@ try {
 } catch {
   showMessage(message, { title: 'This browser cannot draw the effect', detail: 'WebGL is not available.', action: null });
 }
+const afterimagesOn = () => params.afterimageOn === 1 && renderer !== null && renderer.supportsAfterimage;
 
 // The canvas keeps the source's pixel size; CSS scales it to fit the stage.
 function fit() {
@@ -282,6 +282,8 @@ function setUpControls() {
     onChange: (key) => {
       saveSettings(storage, params);
       if (key === 'diplopiaOn') applyDoubleVision();
+      // Switching afterimages off or on always starts from a clear view, even if no frame is drawn in between.
+      if (key === 'afterimageOn') renderer.clearAfterimage();
     },
   });
 
