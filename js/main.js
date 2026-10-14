@@ -322,12 +322,11 @@ function frame(now) {
   if (state.mode === 'depth') depth.offer(source.element);
   // Until the first depth map arrives, depth-aware mode draws as whole-frame.
   const depthMap = state.depthOverride ?? (state.mode === 'depth' ? depth.map : null);
-  renderer.render(source.element, frameState, {
-    params,
-    mode: depthMap ? 'depth' : 'whole',
+  renderer.render(source.element, {
     mirror: source.mirrored,
-    depth: depthMap,
+    blink: frameState.blink,
     showDepth,
+    diplopia: { frame: frameState, params, mode: depthMap ? 'depth' : 'whole', depth: depthMap },
   });
 
   // The photo is taken here, straight after drawing, while the canvas still holds this frame.
